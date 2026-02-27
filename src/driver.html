@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Driver GPS Tracking</title>
+</head>
+<body>
+
+<h2>Driver Live GPS</h2>
+<p id="coords">Waiting for GPS...</p>
+
+<!-- Socket from backend -->
+<script src="http://10.90.13.71:5000/socket.io/socket.io.js"></script>
+
+<script>
+  // Connect to backend
+  const socket = io("http://10.90.13.71:5000");
+
+  // 🔴 PUT YOUR REAL BUS ID HERE
+  const busId = "6995ce6e6c947951f302e797";
+
+  socket.on("connect", () => {
+    console.log("Driver connected to server");
+  });
+
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(
+      (position) => {
+
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+
+        document.getElementById("coords").innerText =
+          `Lat: ${latitude}, Lng: ${longitude}`;
+
+        // Send to server
+        socket.emit("driverLocation", {
+          busId,
+          latitude,
+          longitude
+        });
+
+      },
+      (error) => {
+        console.log("GPS Error:", error);
+        alert("Location permission denied");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0
+      }
+    );
+  } else {
+    alert("Geolocation not supported");
+  }
+</script>
+
+</body>
+</html>

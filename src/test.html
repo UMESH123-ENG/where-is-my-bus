@@ -1,0 +1,77 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Bus Tracking</title>
+  <link rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 500px; }
+  </style>
+</head>
+<body>
+
+<h2>Live Bus Tracking</h2>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="http://10.90.13.71:5000/socket.io/socket.io.js"></script>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+const selectedBusId = params.get("busId");
+
+console.log("Selected Bus From URL:", selectedBusId);
+
+const socket = io("http://10.90.13.71:5000");
+
+const map = L.map('map').setView([28.7, 77.1], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+// Store markers for each bus
+let markers = {};
+let routes = {};
+
+socket.on("busLocationUpdate", (data) => {
+
+  console.log("Incoming:", data.busId);
+
+  // 🔥 DAY 22 FILTER LOGIC
+  if (selectedBusId && String(data.busId) !== String(selectedBusId)) {
+    return; // Ignore other buses
+  }
+
+  const busId = data.busId;
+  const newLatLng = [data.latitude, data.longitude];
+
+  // Create marker if not exists
+  if (!markers[busId]) {
+    markers[busId] = L.marker(newLatLng)
+      .addTo(map)
+      .bindPopup(`Bus ID: ${busId}`);
+  } else {
+    markers[busId].setLatLng(newLatLng);
+  }
+
+  // Draw route path
+  if (!routes[busId]) {
+    routes[busId] = L.polyline([newLatLng], { color: 'blue' }).addTo(map);
+  } else {
+    routes[busId].addLatLng(newLatLng);
+  }
+
+  map.panTo(newLatLng);
+
+});
+
+socket.on("connect", () => {
+  console.log("Connected to socket server");
+});
+
+</script>
+</body>
+</html>
