@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build":"npm install",
+    "build": "npm install",
     "prod": "cross-env NODE_ENV=production node server.js",
     "seed:stops": "node scripts/seedStops.js",
     "seed:routes": "node scripts/createRoutes.js",
@@ -26,7 +26,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^6.7.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
     "socket.io": "^4.7.2"
