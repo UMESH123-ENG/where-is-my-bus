@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Bus Tracking</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      padding: 20px;
+    }
+    h2 {
+      color: #1a73e8;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    #dashboard {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    #info-panel {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      height: fit-content;
+    }
+    .info-card {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    .info-card h3 {
+      color: #1a73e8;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .label {
+      color: #666;
+      font-weight: 500;
+    }
+    .value {
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    .running { color: #34a853; }
+    .delayed { color: #ea4335; }
+    .on-time { color: #34a853; }
+    #map-container {
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    #map {
+      height: 500px;
+      width: 100%;
+      border-radius: 8px;
+    }
+    #progress-container {
+      margin-top: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      color: #666;
+    }
+    #progressBar {
+      height: 24px;
+      background: #e0e0e0;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    #progressFill {
+      height: 100%;
+      background: linear-gradient(90deg, #34a853, #1a73e8);
+      width: 0%;
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stops-timeline {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      padding: 20px 0;
+    }
+    .stops-timeline::before {
+      content: '';
+      position: absolute;
+      top: 30px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #e0e0e0;
+      z-index: 1;
+    }
+    .stop-point {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      flex: 1;
+    }
+    .stop-dot {
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border: 2px solid #1a73e8;
+      border-radius: 50%;
+      margin: 0 auto 8px;
+      transition: all 0.3s ease;
+    }
+    .stop-dot.completed {
+      background: #34a853;
+      border-color: #34a853;
+    }
+    .stop-dot.current {
+      background: #1a73e8;
+      border-color: #1a73e8;
+      transform: scale(1.3);
+      box-shadow: 0 0 10px rgba(26,115,232,0.5);
+    }
+    .stop-name {
+      font-size: 12px;
+      color: #666;
+    }
+    .stop-time {
+      font-size: 10px;
+      color: #999;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🚍 Real-Time Bus Tracking Dashboard</h2>
+
+<div id="dashboard">
+  <!-- Left Panel - Info -->
+  <div id="info-panel">
+    <!-- Bus Information Card -->
+    <div class="info-card">
+      <h3>🚌 Bus Information</h3>
+      <div class="info-row">
+        <span class="label">Bus Number:</span>
+        <span class="value" id="bus-number">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Route:</span>
+        <span class="value" id="route">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Status:</span>
+        <span class="value" id="status">⏳ Waiting...</span>
+      </div>
+    </div>
+
+    <!-- Route Information Card -->
+    <div class="info-card">
+      <h3>🛣️ Route Information</h3>
+      <div class="info-row">
+        <span class="label">📍 Current Position:</span>
+        <span class="value" id="current-location-name">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">🎯 Final Destination:</span>
+        <span class="value" id="final-dest-name">Loading...</span>
+      </div>
+      <div class="info-row">
+        <span class="label">🛣️ Full Route:</span>
+        <span class="value" id="full-route">Loading...</span>
+      </div>
+    </div>
+
+    <!-- Current Location Card -->
+    <div class="info-card">
+      <h3>📍 Current Location</h3>
+      <div class="info-row">
+        <span class="label">Coordinates:</span>
+        <span class="value" id="coordinates">--, --</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Last Updated:</span>
+        <span class="value" id="last-updated">--</span>
+      </div>
+    </div>
+
+    <!-- ETA & Schedule Card -->
+    <div class="info-card">
+      <h3>⏱️ ETA & Schedule</h3>
+      <div class="info-row">
+        <span class="label">Next Stop:</span>
+        <span class="value" id="next-stop">--</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Distance to Next:</span>
+        <span class="value" id="dist-next">--</span>
+      </div>
+      <div class="info-row">
+        <span class="label">ETA at Next:</span>
+        <span class="value" id="eta-next">--</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Final Destination:</span>
+        <span class="value" id="final-dest">--</span>
+      </div>
+      <div class="info-row">
+        <span class="label">ETA at Final:</span>
+        <span class="value" id="eta-final">--</span>
+      </div>
+    </div>
+
+    <!-- Journey Progress Card -->
+    <div class="info-card">
+      <h3>📊 Journey Progress</h3>
+      <div class="info-row">
+        <span class="label">Distance Traveled:</span>
+        <span class="value" id="dist-traveled">0 km</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Distance Remaining:</span>
+        <span class="value" id="dist-remaining">--</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Average Speed:</span>
+        <span class="value" id="avg-speed">-- km/h</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel - Map -->
+  <div id="map-container">
+    <div id="map"></div>
+    
+    <!-- Stops Timeline -->
+    <div id="stops-timeline-container" style="margin-top: 20px;">
+      <h3 style="margin-bottom: 10px;">🛑 Route Stops</h3>
+      <div class="stops-timeline" id="stops-timeline"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Bar -->
+<div id="progress-container">
+  <div class="progress-label">
+    <span>Journey Progress</span>
+    <span id="progress-percent">0%</span>
+  </div>
+  <div id="progressBar">
+    <div id="progressFill">0%</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+// ==================== CONFIGURATION ====================
+const socket = io();
+const params = new URLSearchParams(window.location.search);
+const busId = params.get("busId");
+
+if (!busId) {
+  alert("No busId provided in URL");
+  throw new Error("busId missing");
+}
+
+console.log("🎯 Tracking bus ID:", busId);
+
+// ==================== MAP SETUP ====================
+const map = L.map('map').setView([28.7, 77.1], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+let marker = null;
+let routeLine = null;
+let busData = null;
+let destination = null;
+let lastUpdateTime = null;
+
+// ==================== HELPER FUNCTIONS ====================
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function formatTime(date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Get city name from coordinates using route data
+function getCityFromCoords(lat, lng) {
+  if (!busData || !busData.route || !busData.route.stops) return "En Route";
+  
+  let nearestStop = null;
+  let minDistance = Infinity;
+  
+  busData.route.stops.forEach(stop => {
+    if (stop.stop && stop.stop.coordinates) {
+      const dist = calculateDistance(
+        lat, lng,
+        stop.stop.coordinates.latitude,
+        stop.stop.coordinates.longitude
+      );
+      
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearestStop = stop;
+      }
+    }
+  });
+  
+  return (nearestStop && minDistance < 20) ? 
+    nearestStop.stopDisplayName : "En Route";
+}
+
+// ==================== LOAD BUS DATA ====================
+async function loadBusData() {
+  try {
+    console.log("📡 Loading bus data for ID:", busId);
+    const res = await fetch(`/buses/${busId}`);
+    
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    
+    busData = await res.json();
+    console.log("✅ Bus data loaded:", busData);
+    
+    // Update basic info
+    document.getElementById('bus-number').innerText = busData.busNumber || "Unknown";
+    
+    // Get route info
+    if (busData.route && typeof busData.route === 'object') {
+      document.getElementById('route').innerText = 
+        `${busData.route.fromCityDisplay || '?'} → ${busData.route.toCityDisplay || '?'}`;
+      document.getElementById('final-dest').innerText = busData.route.toCityDisplay || '?';
+      document.getElementById('final-dest-name').innerText = busData.route.toCityDisplay || '?';
+      
+      const routeStops = busData.route.stops?.map(s => s.stopDisplayName) || [];
+      document.getElementById('full-route').innerText = routeStops.join(" → ") || 'No stops';
+      
+      // Set destination coordinates from last stop
+      const lastStop = busData.route.stops[busData.route.stops.length - 1];
+      if (lastStop && lastStop.stop && lastStop.stop.coordinates) {
+        destination = [
+          lastStop.stop.coordinates.latitude,
+          lastStop.stop.coordinates.longitude
+        ];
+        console.log("🎯 Destination set to:", destination);
+      }
+      
+      // Create stops timeline
+      createStopsTimeline(busData.route.stops);
+    } else {
+      console.log("⚠️ No route data available");
+    }
+    
+    // If bus has location, show it
+    if (busData.currentLocation && busData.currentLocation.latitude !== 0) {
+      console.log("📍 Initial location:", busData.currentLocation);
+      updateMapAndInfo(
+        busData.currentLocation.latitude,
+        busData.currentLocation.longitude
+      );
+    } else {
+      console.log("⏳ No initial location");
+    }
+    
+  } catch (err) {
+    console.error("❌ Error loading bus:", err);
+    document.getElementById('bus-number').innerText = "Error loading bus";
+  }
+}
+
+// ==================== CREATE STOPS TIMELINE ====================
+function createStopsTimeline(stops) {
+  const timeline = document.getElementById('stops-timeline');
+  timeline.innerHTML = '';
+  
+  stops.forEach((stop, index) => {
+    const stopDiv = document.createElement('div');
+    stopDiv.className = 'stop-point';
+    stopDiv.id = `stop-${index}`;
+    
+    const dotDiv = document.createElement('div');
+    dotDiv.className = 'stop-dot';
+    
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'stop-name';
+    nameDiv.innerText = stop.stopDisplayName || stop.stopName || '?';
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'stop-time';
+    timeDiv.innerText = stop.estimatedArrivalTime || '--:--';
+    
+    stopDiv.appendChild(dotDiv);
+    stopDiv.appendChild(nameDiv);
+    stopDiv.appendChild(timeDiv);
+    timeline.appendChild(stopDiv);
+  });
+}
+
+// ==================== UPDATE STOPS STATUS ====================
+function updateStopsStatus(currentLat, currentLng) {
+  if (!busData || !busData.route || !busData.route.stops) return;
+  
+  // Find which stop is nearest
+  let nearestStopIndex = 0;
+  let minDistance = Infinity;
+  
+  busData.route.stops.forEach((stop, index) => {
+    if (stop.stop && stop.stop.coordinates) {
+      const dist = calculateDistance(
+        currentLat, currentLng,
+        stop.stop.coordinates.latitude,
+        stop.stop.coordinates.longitude
+      );
+      
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearestStopIndex = index;
+      }
+    }
+  });
+  
+  // Update stop dots
+  busData.route.stops.forEach((_, index) => {
+    const dot = document.querySelector(`#stop-${index} .stop-dot`);
+    if (!dot) return;
+    
+    dot.classList.remove('completed', 'current');
+    
+    if (index < nearestStopIndex) {
+      dot.classList.add('completed');
+    } else if (index === nearestStopIndex) {
+      dot.classList.add('current');
+    }
+  });
+  
+  // Next stop
+  if (nearestStopIndex < busData.route.stops.length - 1) {
+    document.getElementById('next-stop').innerText = 
+      busData.route.stops[nearestStopIndex + 1].stopDisplayName || '?';
+  }
+}
+
+// ==================== FETCH ETA DATA ====================
+async function fetchETA() {
+  try {
+    const res = await fetch(`/buses/eta/${busId}`);
+    const etaData = await res.json();
+    
+    if (etaData.nextStop) {
+      document.getElementById('next-stop').innerText = etaData.nextStop;
+      document.getElementById('dist-next').innerText = etaData.distanceToNext || '--';
+      document.getElementById('eta-next').innerText = etaData.etaTime || '--';
+    }
+    
+  } catch (err) {
+    console.log("ETA fetch error:", err);
+  }
+}
+
+// ==================== UPDATE DISTANCE INFO ====================
+async function updateDistanceInfo() {
+  try {
+    if (!busData || !destination) {
+      console.log("⏳ Waiting for bus data or destination");
+      return;
+    }
+    
+    // Get current location
+    let currentLat, currentLng;
+    
+    if (marker) {
+      const pos = marker.getLatLng();
+      currentLat = pos.lat;
+      currentLng = pos.lng;
+    } else if (busData.currentLocation && busData.currentLocation.latitude !== 0) {
+      currentLat = busData.currentLocation.latitude;
+      currentLng = busData.currentLocation.longitude;
+    } else {
+      return;
+    }
+    
+    // Calculate remaining distance to destination
+    const remaining = calculateDistance(
+      currentLat, currentLng,
+      destination[0], destination[1]
+    );
+    
+    // Get total distance from route
+    const totalDistance = busData.route?.totalDistance || remaining;
+    const traveled = Math.max(0, totalDistance - remaining);
+    
+    // Update UI
+    document.getElementById('dist-traveled').innerText = traveled.toFixed(2) + ' km';
+    document.getElementById('dist-remaining').innerText = remaining.toFixed(2) + ' km';
+    
+    // Update average speed
+    if (busData.currentLocation?.speed) {
+      document.getElementById('avg-speed').innerText = busData.currentLocation.speed + ' km/h';
+    }
+    
+    // Update progress
+    if (totalDistance > 0) {
+      const progress = (traveled / totalDistance) * 100;
+      const progressValue = Math.min(100, Math.max(0, progress));
+      
+      document.getElementById('progress-percent').innerText = progressValue.toFixed(1) + '%';
+      document.getElementById('progressFill').style.width = progressValue + '%';
+      document.getElementById('progressFill').innerText = progressValue.toFixed(1) + '%';
+    }
+    
+    // Calculate ETA
+    const speed = busData.currentLocation?.speed || 45;
+    const etaMinutes = Math.round((remaining / speed) * 60);
+    const etaTime = new Date(Date.now() + etaMinutes * 60000);
+    document.getElementById('eta-final').innerText = 
+      etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+  } catch (err) {
+    console.log("❌ Error in updateDistanceInfo:", err);
+  }
+}
+
+// ==================== CHECK DELAY STATUS ====================
+function checkDelayStatus(currentLat, currentLng) {
+  if (!busData || !busData.route || !busData.route.stops) {
+    return { status: "unknown", minutes: 0 };
+  }
+  
+  // Find which stop is next
+  let nextStopIndex = 0;
+  let minDistance = Infinity;
+  
+  busData.route.stops.forEach((stop, index) => {
+    if (stop.stop && stop.stop.coordinates) {
+      const dist = calculateDistance(
+        currentLat, currentLng,
+        stop.stop.coordinates.latitude,
+        stop.stop.coordinates.longitude
+      );
+      
+      if (dist < minDistance) {
+        minDistance = dist;
+        nextStopIndex = index;
+      }
+    }
+  });
+  
+  // Get the next stop's scheduled arrival time
+  const nextStop = busData.route.stops[nextStopIndex + 1];
+  if (!nextStop) return { status: "completed", minutes: 0 };
+  
+  const scheduledTime = nextStop.estimatedArrivalTime;
+  
+  // Calculate estimated arrival time based on current speed
+  const distanceToNext = calculateDistance(
+    currentLat, currentLng,
+    nextStop.stop.coordinates.latitude,
+    nextStop.stop.coordinates.longitude
+  );
+  
+  const currentSpeed = busData.currentLocation?.speed || 45;
+  const minutesToNext = Math.round((distanceToNext / currentSpeed) * 60);
+  
+  const now = new Date();
+  const estimatedArrival = new Date(now.getTime() + minutesToNext * 60000);
+  const estimatedTimeStr = estimatedArrival.toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  // Parse scheduled time
+  const [schedHour, schedMin] = scheduledTime.split(':').map(Number);
+  const scheduledDate = new Date();
+  scheduledDate.setHours(schedHour, schedMin, 0);
+  
+  const delayMinutes = Math.round((estimatedArrival - scheduledDate) / 60000);
+  
+  let status = "on-time";
+  let statusColor = "#34a853";
+  let statusText = "🟢 On Time";
+  
+  if (delayMinutes > 10) {
+    status = "delayed";
+    statusColor = "#ea4335";
+    statusText = `🔴 Delayed by ${delayMinutes} min`;
+  } else if (delayMinutes < -5) {
+    status = "early";
+    statusColor = "#1a73e8";
+    statusText = `🔵 Early by ${Math.abs(delayMinutes)} min`;
+  }
+  
+  return {
+    status,
+    minutes: delayMinutes,
+    text: statusText,
+    color: statusColor,
+    scheduledTime,
+    estimatedTime: estimatedTimeStr,
+    nextStop: nextStop.stopDisplayName
+  };
+}
+
+// ==================== UPDATE MAP AND INFO ====================
+async function updateMapAndInfo(lat, lng) {
+  console.log("📍 Updating map to:", lat, lng);
+  
+  const currentPoint = [lat, lng];
+  
+  // Update marker
+  if (!marker) {
+    marker = L.marker(currentPoint).addTo(map);
+  } else {
+    marker.setLatLng(currentPoint);
+  }
+  
+  map.panTo(currentPoint);
+  
+  // Update displays
+  document.getElementById('coordinates').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  document.getElementById('last-updated').innerText = formatTime(new Date());
+  
+  // Update route info
+  if (busData?.route) {
+    document.getElementById('current-location-name').innerText = getCityFromCoords(lat, lng);
+  }
+  
+  // Update stops status
+  updateStopsStatus(lat, lng);
+  
+  // Fetch fresh ETA data
+  await fetchETA();
+  
+  // Update distance info
+  await updateDistanceInfo();
+  
+  // Update status
+  document.getElementById('status').innerHTML = '🟢 Running';
+  
+  // Check delay status
+  if (busData?.route) {
+    const delayInfo = checkDelayStatus(lat, lng);
+    
+    let delayDiv = document.getElementById('delay-info');
+    if (!delayDiv) {
+      const infoCard = document.querySelector('.info-card:last-child');
+      delayDiv = document.createElement('div');
+      delayDiv.className = 'info-card';
+      delayDiv.id = 'delay-info';
+      delayDiv.innerHTML = '<h3>⏰ Schedule Status</h3>';
+      infoCard.parentNode.insertBefore(delayDiv, infoCard.nextSibling);
+    }
+    
+    delayDiv.innerHTML = `
+      <h3>⏰ Schedule Status</h3>
+      <div class="info-row">
+        <span class="label">Next Stop:</span>
+        <span class="value">${delayInfo.nextStop}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Scheduled:</span>
+        <span class="value">${delayInfo.scheduledTime}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Estimated:</span>
+        <span class="value">${delayInfo.estimatedTime}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Status:</span>
+        <span class="value" style="color: ${delayInfo.color}">${delayInfo.text}</span>
+      </div>
+    `;
+  }
+  
+  // Draw route to destination using actual stops
+  if (destination && busData?.route?.stops) {
+    // Find which stop is next
+    let nextStopIndex = 0;
+    let minDistance = Infinity;
+    
+    busData.route.stops.forEach((stop, index) => {
+      if (stop.stop?.coordinates) {
+        const dist = calculateDistance(
+          lat, lng,
+          stop.stop.coordinates.latitude,
+          stop.stop.coordinates.longitude
+        );
+        
+        if (dist < minDistance) {
+          minDistance = dist;
+          nextStopIndex = index;
+        }
+      }
+    });
+    
+    // Build route through remaining stops
+    let waypoints = [`${lng},${lat}`];
+    
+    for (let i = nextStopIndex + 1; i < busData.route.stops.length; i++) {
+      const stop = busData.route.stops[i];
+      if (stop.stop?.coordinates) {
+        waypoints.push(`${stop.stop.coordinates.longitude},${stop.stop.coordinates.latitude}`);
+      }
+    }
+    
+    if (waypoints.length > 1) {
+      const osrmURL = `https://router.project-osrm.org/route/v1/driving/${waypoints.join(';')}?overview=full&geometries=geojson`;
+      
+      try {
+        const response = await fetch(osrmURL);
+        const routeData = await response.json();
+        
+        if (routeData.routes?.[0]) {
+          const latLngs = routeData.routes[0].geometry.coordinates
+            .map(coord => [coord[1], coord[0]]);
+          
+          if (routeLine) map.removeLayer(routeLine);
+          
+          routeLine = L.polyline(latLngs, {
+            color: "#1a73e8",
+            weight: 5,
+            opacity: 0.7
+          }).addTo(map);
+        }
+      } catch (err) {
+        console.log("OSRM error:", err);
+      }
+    }
+  }
+}
+
+// ==================== LIVE UPDATES ====================
+socket.on("busLocationUpdate", (data) => {
+  console.log("📡 Live update received:", data);
+  if (String(data.busId) !== String(busId)) return;
+  updateMapAndInfo(data.latitude, data.longitude);
+});
+
+socket.on("connect", () => {
+  console.log("✅ Connected to socket server");
+  loadBusData();
+});
+
+socket.on("disconnect", () => {
+  console.log("❌ Disconnected from socket server");
+});
+
+// ==================== INITIAL LOAD ====================
+loadBusData();
+
+</script>
+</body>
+</html>

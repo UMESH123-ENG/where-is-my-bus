@@ -1,3 +1,18 @@
-git add .
-git commit -m "Day 1 setup complete"
+# Dependency directories
+node_modules/
 
+# Environment variables
+.env
+.env.production
+.env.local
+
+# OS files
+.DS_Store
+
+# Logs
+npm-debug.log*
+*.log
+
+# Build directories
+dist/
+build/

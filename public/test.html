@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Bus Tracking</title>
+  <link rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 500px; }
+    #info-panel {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      font-family: Arial;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .bus-info {
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+    .bus-info .running { color: green; font-weight: bold; }
+    .bus-info .stopped { color: red; }
+  </style>
+</head>
+<body>
+
+<h2>🚍 Live Bus Tracking</h2>
+
+<div id="info-panel">
+  <h3>Active Buses</h3>
+  <div id="bus-list">Loading buses...</div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const selectedBusId = params.get("busId");
+
+console.log("Selected Bus From URL:", selectedBusId);
+
+const socket = io();
+
+const map = L.map('map').setView([28.7, 77.1], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+// Store markers and routes for each bus
+let markers = {};
+let routes = {};
+let busData = {}; // Store bus info for display
+
+// ==================== LOAD EXISTING BUSES ====================
+async function loadExistingBuses() {
+  try {
+    const res = await fetch('/buses');
+    const data = await res.json();
+    
+    // Handle paginated response
+    const buses = data.buses || data;
+    
+    console.log("📋 Loaded existing buses:", buses.length);
+    
+    buses.forEach(bus => {
+      busData[bus._id] = bus;
+      
+      // If bus has location, show it on map
+      if (bus.currentLocation && 
+          bus.currentLocation.latitude !== 0 && 
+          bus.currentLocation.longitude !== 0) {
+        
+        const lat = bus.currentLocation.latitude;
+        const lng = bus.currentLocation.longitude;
+        const busId = bus._id;
+        
+        // Create marker
+        if (!markers[busId]) {
+          markers[busId] = L.marker([lat, lng])
+            .addTo(map)
+            .bindPopup(`
+              <b>Bus:</b> ${bus.busNumber}<br>
+              <b>Route:</b> ${bus.source} → ${bus.destination}<br>
+              <b>Status:</b> 🟢 Running
+            `);
+        }
+        
+        // Draw initial route if we have history
+        if (bus.locationHistory && bus.locationHistory.length > 1) {
+          const historyPoints = bus.locationHistory.map(h => [h.latitude, h.longitude]);
+          if (!routes[busId]) {
+            routes[busId] = L.polyline(historyPoints, { color: 'blue', weight: 3 }).addTo(map);
+          }
+        }
+      }
+    });
+    
+    updateBusList();
+    
+  } catch (err) {
+    console.error("Error loading buses:", err);
+    document.getElementById('bus-list').innerHTML = 'Error loading buses';
+  }
+}
+
+// ==================== UPDATE BUS LIST DISPLAY ====================
+function updateBusList() {
+  const busListDiv = document.getElementById('bus-list');
+  busListDiv.innerHTML = '';
+  
+  const busIds = Object.keys(busData);
+  
+  if (busIds.length === 0) {
+    busListDiv.innerHTML = 'No buses found';
+    return;
+  }
+  
+  busIds.forEach(id => {
+    const bus = busData[id];
+    const isRunning = bus.currentLocation && 
+                      bus.currentLocation.latitude !== 0;
+    
+    const div = document.createElement('div');
+    div.className = 'bus-info';
+    div.innerHTML = `
+      <strong>${bus.busNumber}</strong> 
+      <span class="${isRunning ? 'running' : 'stopped'}">
+        ${isRunning ? '🟢' : '🔴'}
+      </span><br>
+      ${bus.source} → ${bus.destination}<br>
+      <small>Last: ${isRunning ? 
+        bus.currentLocation.latitude.toFixed(4) + ', ' + bus.currentLocation.longitude.toFixed(4) : 
+        'Not started'}</small>
+      <button onclick="focusBus('${id}')" style="margin-left: 10px; font-size: 12px;">📍 Focus</button>
+    `;
+    busListDiv.appendChild(div);
+  });
+}
+
+// ==================== FOCUS ON SPECIFIC BUS ====================
+window.focusBus = function(busId) {
+  if (markers[busId]) {
+    const latlng = markers[busId].getLatLng();
+    map.setView(latlng, 10);
+    markers[busId].openPopup();
+  }
+};
+
+// ==================== LIVE UPDATES ====================
+socket.on("busLocationUpdate", (data) => {
+  console.log("live update:", data);
+
+  // Filter if specific bus selected
+  if (selectedBusId && String(data.busId) !== String(selectedBusId)) {
+    return; // Ignore other buses
+  }
+
+  const busId = data.busId;
+  const newLatLng = [data.latitude, data.longitude];
+
+  // Update or create marker
+  if (!markers[busId]) {
+    markers[busId] = L.marker(newLatLng)
+      .addTo(map)
+      .bindPopup(`Bus ID: ${busId}<br>Loading details...`);
+    
+    // Fetch bus details for popup
+    fetch(`/buses/${busId}`)
+      .then(res => res.json())
+      .then(bus => {
+        busData[busId] = bus;
+        markers[busId].bindPopup(`
+          <b>Bus:</b> ${bus.busNumber}<br>
+          <b>Route:</b> ${bus.source} → ${bus.destination}<br>
+          <b>Status:</b> 🟢 Running
+        `);
+        updateBusList();
+      });
+      
+  } else {
+    markers[busId].setLatLng(newLatLng);
+  }
+
+  // Update or create route path
+  if (!routes[busId]) {
+    routes[busId] = L.polyline([newLatLng], { color: 'blue', weight: 3 }).addTo(map);
+  } else {
+    routes[busId].addLatLng(newLatLng);
+  }
+
+  // Center map on this bus if no specific bus selected
+  if (!selectedBusId) {
+    map.panTo(newLatLng);
+  }
+  
+  // Update bus data if we have it
+  if (busData[busId]) {
+    busData[busId].currentLocation = {
+      latitude: data.latitude,
+      longitude: data.longitude
+    };
+    updateBusList();
+  }
+});
+
+socket.on("connect", () => {
+  console.log("✅ Connected to socket server");
+  loadExistingBuses(); // Load existing buses when connected
+});
+
+socket.on("disconnect", () => {
+  console.log("❌ Disconnected from socket server");
+});
+
+// Load buses on page load
+loadExistingBuses();
+
+</script>
+</body>
+</html>

@@ -1,8 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const driverController = require("../controllers/driver.controller");
+const driverAuth = require("../controllers/driverAuth.controller");
+const busController = require("../controllers/bus.controller"); // 🔥 ADD THIS!
+const authMiddleware = require("../middleware/driverAuth.middleware");
 
-router.post("/register", driverController.registerDriver);
-router.post("/login", driverController.loginDriver);
+// Public routes
+router.post("/register", driverAuth.register);
+router.post("/login", driverAuth.login);
+
+// Protected routes
+router.post("/logout", authMiddleware, driverAuth.logout);
+router.get("/profile", authMiddleware, driverAuth.profile);
+
+// Bus status route for drivers
+router.put("/status", authMiddleware, busController.updateBusStatus); // 🔥 Now busController is defined
 
 module.exports = router;

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Driver Registration - Haryana Roadways</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h2 {
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-weight: 500;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #5a67d8;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102,126,234,0.2);
+    }
+    .message {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      display: none;
+    }
+    .success {
+      background: #f0fff4;
+      color: #22543d;
+      border: 1px solid #9ae6b4;
+      display: block;
+    }
+    .error {
+      background: #fff5f5;
+      color: #742a2a;
+      border: 1px solid #feb2b2;
+      display: block;
+    }
+    .login-link {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .login-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .login-link a:hover {
+      text-decoration: underline;
+    }
+    .info-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+    .bus-search {
+      position: relative;
+    }
+    .bus-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+      z-index: 1000;
+    }
+    .bus-suggestion-item {
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .bus-suggestion-item:hover {
+      background: #f7fafc;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🚍 Haryana Roadways</h2>
+    <div class="subtitle">Driver Registration Portal</div>
+    
+    <form id="registerForm" onsubmit="registerDriver(event)">
+      <div class="form-group">
+        <label>👤 Full Name</label>
+        <input type="text" id="name" placeholder="Enter your full name" required>
+      </div>
+
+      <div class="form-group">
+        <label>📱 Phone Number</label>
+        <input type="tel" id="phone" placeholder="9876543210" pattern="[0-9]{10}" required>
+      </div>
+
+      <div class="form-group">
+        <label>📧 Email</label>
+        <input type="email" id="email" placeholder="driver@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label>🔐 Password</label>
+        <input type="password" id="password" placeholder="Create password" required minlength="6">
+        <div class="info-text">Minimum 6 characters</div>
+      </div>
+
+      <div class="form-group">
+        <label>🚌 Bus Assignment (Optional)</label>
+        <div class="bus-search">
+          <input type="text" id="busSearch" placeholder="Search bus number..." onkeyup="searchBuses()">
+          <div id="busSuggestions" class="bus-suggestions"></div>
+        </div>
+        <input type="hidden" id="selectedBusId">
+        <input type="hidden" id="selectedBusNumber">
+        <div class="info-text">Leave empty if bus not assigned yet. Admin can assign later.</div>
+      </div>
+
+      <button type="submit">📝 Register as Driver</button>
+    </form>
+
+    <div id="message" class="message"></div>
+
+    <div class="login-link">
+      Already registered? <a href="driver.html">Login here</a>
+    </div>
+  </div>
+
+  <script>
+    let allBuses = [];
+
+    // Load buses on page load
+    async function loadBuses() {
+      try {
+        const res = await fetch('/buses');
+        const data = await res.json();
+        allBuses = data.buses || data;
+      } catch (err) {
+        console.log('Error loading buses:', err);
+      }
+    }
+    loadBuses();
+
+    // Search buses as user types
+    function searchBuses() {
+      const searchTerm = document.getElementById('busSearch').value.toLowerCase();
+      const suggestionsDiv = document.getElementById('busSuggestions');
+      
+      if (searchTerm.length < 2) {
+        suggestionsDiv.style.display = 'none';
+        return;
+      }
+
+      const matches = allBuses.filter(bus => 
+        bus.busNumber.toLowerCase().includes(searchTerm) &&
+        !bus.assignedDriver // Only show unassigned buses
+      );
+
+      if (matches.length > 0) {
+        suggestionsDiv.innerHTML = matches.map(bus => `
+          <div class="bus-suggestion-item" onclick="selectBus('${bus._id}', '${bus.busNumber}')">
+            <strong>${bus.busNumber}</strong><br>
+            <small>${bus.source} → ${bus.destination}</small>
+          </div>
+        `).join('');
+        suggestionsDiv.style.display = 'block';
+      } else {
+        suggestionsDiv.innerHTML = '<div class="bus-suggestion-item">No available buses found</div>';
+        suggestionsDiv.style.display = 'block';
+      }
+    }
+
+    // Select bus from suggestions
+    function selectBus(busId, busNumber) {
+      document.getElementById('selectedBusId').value = busId;
+      document.getElementById('selectedBusNumber').value = busNumber;
+      document.getElementById('busSearch').value = busNumber;
+      document.getElementById('busSuggestions').style.display = 'none';
+    }
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.bus-search')) {
+        document.getElementById('busSuggestions').style.display = 'none';
+      }
+    });
+
+    // Register driver
+    async function registerDriver(event) {
+      event.preventDefault();
+
+      const name = document.getElementById('name').value;
+      const phone = document.getElementById('phone').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const busNumber = document.getElementById('selectedBusNumber').value;
+
+      const messageDiv = document.getElementById('message');
+      messageDiv.className = 'message';
+      messageDiv.style.display = 'none';
+
+      try {
+        const response = await fetch('/drivers/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            phone,
+            email,
+            password,
+            busNumber: busNumber || undefined
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          messageDiv.className = 'message success';
+          messageDiv.innerHTML = `
+            ✅ Registration successful!<br>
+            Name: ${data.driver.name}<br>
+            Email: ${data.driver.email}<br>
+            Bus: ${data.driver.assignedBus}<br><br>
+            <a href="driver.html" style="color: #22543d; font-weight: bold;">Click here to login →</a>
+          `;
+          messageDiv.style.display = 'block';
+          document.getElementById('registerForm').reset();
+        } else {
+          throw new Error(data.message);
+        }
+
+      } catch (err) {
+        messageDiv.className = 'message error';
+        messageDiv.innerText = '❌ ' + err.message;
+        messageDiv.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>

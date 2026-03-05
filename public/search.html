@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bus Search</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #f4f6f9;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    .search-box {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    input {
+      padding: 8px;
+      margin: 5px;
+      width: 150px;
+    }
+
+    button {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .card {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    .running {
+      color: green;
+      font-weight: bold;
+    }
+
+    .stopped {
+      color: red;
+      font-weight: bold;
+    }
+
+    .location {
+      font-size: 12px;
+      color: gray;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🚍 Search Buses</h2>
+
+<div class="search-box">
+  <input type="text" id="from" placeholder="From" value="rohtak">
+  <input type="text" id="to" placeholder="To" value="delhi">
+  <button onclick="searchBus()">Search</button>
+</div>
+
+<p id="loading" style="text-align:center;"></p>
+<div id="results"></div>
+
+<!-- ✅ FIX 1: Add Socket.io -->
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+// ✅ FIX 2: Initialize socket
+const socket = io();
+
+// ✅ FIX 3: Check connection
+socket.on("connect", () => {
+  console.log("✅ Search page connected to socket server");
+});
+
+async function searchBus() {
+  const from = document.getElementById("from").value.toLowerCase().trim();
+  const to = document.getElementById("to").value.toLowerCase().trim();
+
+  if (!from || !to) {
+    alert("Please enter both cities");
+    return;
+  }
+
+  const results = document.getElementById("results");
+  const loading = document.getElementById("loading");
+
+  results.innerHTML = "";
+  loading.innerText = "🔍 Searching buses...";
+
+  try {
+    const res = await fetch(`/buses/search?source=${from}&destination=${to}`);
+    const data = await res.json();
+
+    loading.innerText = "";
+
+    if (data.length === 0) {
+      results.innerHTML = "<p style='text-align:center;'>No buses found</p>";
+      return;
+    }
+// In your search.html, update the data processing
+data.forEach(bus => {
+  const isRunning = bus.status === "active" || bus.status === "on_route";
+  
+  const card = document.createElement("div");
+  card.className = "card";
+  card.setAttribute("data-bus-id", bus._id);
+
+  card.innerHTML = `
+    <h3>🚌 ${bus.busNumber}</h3>
+    <p><strong>Route:</strong> ${bus.route.fromCity} → ${bus.route.toCity}</p>
+    <p><strong>Via:</strong> ${bus.route.routeName}</p>
+    <p><strong>Departure:</strong> ${bus.departureTime}</p>
+    <p><strong>Arrival:</strong> ${bus.arrivalTime}</p>
+    <p><strong>Seats Available:</strong> ${bus.seatsAvailable}</p>
+    <p><strong>Next Stop:</strong> ${bus.nextStop || 'Starting soon'}</p>
+    <p>
+      <strong>Status:</strong>
+      <span class="${isRunning ? 'running' : 'stopped'}">
+        ${isRunning ? '🟢 Running' : '🔴 Not Started'}
+      </span>
+    </p>
+    ${isRunning ? `
+      <p class="location">
+        📍 Current: ${bus.currentLocation.latitude.toFixed(4)}, 
+                   ${bus.currentLocation.longitude.toFixed(4)}
+      </p>
+      <button onclick="trackBus('${bus._id}')">Track Live</button>
+    ` : '<button disabled>Not Available</button>'}
+  `;
+  
+  results.appendChild(card);
+});
+
+  } catch (error) {
+    console.error("Search error:", error);
+    loading.innerText = "";
+    results.innerHTML = "<p style='text-align:center;color:red;'>Error fetching buses</p>";
+  }
+}
+
+function trackBus(busId) {
+  window.location.href = `tracking.html?busId=${busId}`;
+}
+
+// ✅ FIX 5: Live updates for search page
+socket.on("busLocationUpdate", (data) => {
+  console.log("🔄 Live update received in search:", data);
+  
+  // Find the card for this bus
+  const card = document.querySelector(`[data-bus-id="${data.busId}"]`);
+  
+  if (card) {
+    const locationElem = card.querySelector('.location');
+    const statusElem = card.querySelector('.status');
+    
+    if (locationElem) {
+      locationElem.innerText = 
+        `📍 Current: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`;
+    }
+    
+    if (statusElem) {
+      statusElem.className = 'running';
+      statusElem.innerText = '🟢 Running';
+    }
+    
+    // Enable track button if disabled
+    const trackBtn = card.querySelector('button[onclick^="trackBus"]');
+    if (trackBtn && trackBtn.disabled) {
+      trackBtn.disabled = false;
+      trackBtn.style.background = '#4CAF50';
+      trackBtn.innerText = '🎯 Track Live';
+    }
+    
+    console.log("✅ Updated card for bus:", data.busId);
+  }
+});
+
+// Auto-search when page loads (for testing)
+window.onload = () => {
+  // Pre-fill example search
+  document.getElementById("from").value = "rohtak";
+  document.getElementById("to").value = "delhi";
+  searchBus();
+};
+</script>
+
+</body>
+</html>
