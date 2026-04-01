@@ -1,0 +1,7 @@
+
+body { font-family: Arial; padding: 20px; background: #f0f2f5; }
+h1 { color: #1a73e8; }
+.search-box { margin: 20px 0; }
+input { padding: 8px; margin: 5px; }
+button { padding: 8px 15px; background: #1a73e8; color: white; border: none; cursor: pointer; }
+.bus-card { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; }

@@ -4,6 +4,8 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 require("dotenv").config();
+const searchLoggerMiddleware = require('./src/middleware/searchLogger.middleware');
+const searchHistoryRoutes = require('./src/routes/searchHistory.routes');
 
 // ==================== ENVIRONMENT VARIABLES ====================
 const PORT = process.env.PORT || 5000;
@@ -104,7 +106,7 @@ io.on("connection", (socket) => {
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
-
+app.use(searchLoggerMiddleware);
 // ==================== RATE LIMITING ====================
 const rateLimit = require("express-rate-limit");
 
